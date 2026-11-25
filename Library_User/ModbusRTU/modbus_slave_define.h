@@ -73,6 +73,15 @@
 #define ADR_INPUT_DRIVER_ALM_OVER_VOLT   123   // u16, cảnh báo quá áp (3x123)
 #define ADR_INPUT_IMD_MEASURE_WARN       124   // u16, cảnh báo lỗi CAN driver (3x124)
 
+// Nhóm GPS cho HMI (int32 gửi word cao trước)
+#define ADR_INPUT_GPS_STATE              130   // u16, 0=lỗi, 1=có dữ liệu, 2=có giờ, 3=fix hợp lệ (3x130)
+#define ADR_INPUT_GPS_LAT_HI             131   // int32 deg*1e7, word cao (3x131)
+#define ADR_INPUT_GPS_LAT_LO             132   // int32 deg*1e7, word thấp (3x132)
+#define ADR_INPUT_GPS_LON_HI             133   // int32 deg*1e7, word cao (3x133)
+#define ADR_INPUT_GPS_LON_LO             134   // int32 deg*1e7, word thấp (3x134)
+#define ADR_INPUT_GPS_SOG                135   // u16, tốc độ km/h*100 (3x135)
+#define ADR_INPUT_GPS_COG                136   // u16, hướng độ*100 (3x136)
+
 
 // =======================  Holding registers (4X) ================== //
 #define ADR_HOLD_DRIVER_TEMP_HIGH_C      150   // 4x150, ngưỡng nhiệt controller cao

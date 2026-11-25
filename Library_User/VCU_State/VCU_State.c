@@ -232,7 +232,7 @@ void VCU_StateTask(void)
 
 	//  if (HAL_GetTick() - send_time > 500) {
 	// 	send_time = HAL_GetTick();
-	// 	Can_Vcu_Send_Slider(&hcan1);
+	// 	Can_Vcu_Send_Slider(&hcan2);
 	//  }
 
 	/* Xử lý logic của trạng thái hiện tại để quyết định trạng thái tiếp theo */
@@ -347,8 +347,11 @@ static void VCU_UpdateInputs(void) {
 	vcu_ctx.inputs.ignition_level = VCU_ReadIgnitionLevel();
 	vcu_ctx.inputs.KSI = (vcu_ctx.inputs.ignition_level == IGNITION_LEVEL_1) ||
 						 (vcu_ctx.inputs.ignition_level == IGNITION_LEVEL_2);
-#else
+#elif defined(KSI_Pin)
 	vcu_ctx.inputs.KSI = (HAL_GPIO_ReadPin(KSI_GPIO_Port, KSI_Pin) == GPIO_PIN_SET) ? false : true;
+#else
+	/* Board mới: chưa map KSI — giữ OFF để tránh relay chatter */
+	vcu_ctx.inputs.KSI = false;
 #endif
 
 #ifdef VCU_MULTI_LEVEL_IGNITION
@@ -587,15 +590,18 @@ static bool VCU_BMSCriticalError(void)
  */
 static void VCU_ApplyOutputs(void)
 {
-	/* Điều khiển relay PE3 để đóng/mở contactor nguồn */
+#if BOARD_HOLD_CTR_OUT_OFF
+	/* Bring-up: không đụng GPIO relay (giữ mức init OFF) */
+	return;
+#else
 	HAL_GPIO_WritePin(RELAY_CONTACTOR_GPIO_Port,
 			  RELAY_CONTACTOR_Pin,
 			  vcu_ctx.outputs.contactor_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
-	/* Điều khiển relay PE2 đóng/mở động cơ */
 	HAL_GPIO_WritePin(RELAY_DISABLE_MOTOR_GPIO_Port,
 			  RELAY_DISABLE_MOTOR_Pin,
 			  vcu_ctx.outputs.disable_motor ? GPIO_PIN_SET : GPIO_PIN_RESET);
+#endif
 }
 
 /**

@@ -45,6 +45,9 @@
 /*---------- SPIF_PLATFORM  -----------*/
 #define SPIF_PLATFORM      SPIF_PLATFORM_HAL
 
+/* Board mới: W25Q trên PE7–PE10 — không có AF SPI HW → soft SPI */
+#define SPIF_USE_SOFT_SPI  1
+
 /*---------- SPIF_RTOS  -----------*/
 #define SPIF_RTOS      SPIF_RTOS_DISABLE
 

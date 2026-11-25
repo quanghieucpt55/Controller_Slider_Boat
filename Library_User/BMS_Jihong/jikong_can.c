@@ -83,6 +83,10 @@ void BMS_Jikong_Init(CAN_HandleTypeDef *hcan) {
 }
 
 void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan) {
+	/* BMS/YPC chỉ trên CAN1 (PD0/PD1) */
+	if (hcan->Instance != CAN1) {
+		return;
+	}
 	if (HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO1) > 0) {
 		CAN_RxHeaderTypeDef hdr;
 		uint8_t d[8];

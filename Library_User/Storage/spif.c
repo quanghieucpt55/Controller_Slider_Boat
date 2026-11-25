@@ -5,6 +5,9 @@
 
 #include "spif.h"
 #include "dwt_delay.h"
+#if SPIF_USE_SOFT_SPI
+#include "soft_spi_flash.h"
+#endif
 
 #if SPIF_DEBUG == SPIF_DEBUG_DISABLE
 #define dprintf(...)
@@ -164,7 +167,14 @@ void SPIF_CsPin(SPIF_HandleTypeDef *Handle, bool Select)
 bool SPIF_TransmitReceive(SPIF_HandleTypeDef *Handle, uint8_t *Tx, uint8_t *Rx, size_t Size, uint32_t Timeout)
 {
   bool retVal = false;
-#if (SPIF_PLATFORM == SPIF_PLATFORM_HAL)
+  (void)Timeout;
+#if SPIF_USE_SOFT_SPI
+  (void)Handle;
+  if (SoftSpiFlash_TransmitReceive(Tx, Rx, Size) == HAL_OK)
+  {
+    retVal = true;
+  }
+#elif (SPIF_PLATFORM == SPIF_PLATFORM_HAL)
   if (HAL_SPI_TransmitReceive(Handle->HSpi, Tx, Rx, Size, Timeout) == HAL_OK)
   {
     retVal = true;
@@ -206,7 +216,14 @@ bool SPIF_TransmitReceive(SPIF_HandleTypeDef *Handle, uint8_t *Tx, uint8_t *Rx, 
 bool SPIF_Transmit(SPIF_HandleTypeDef *Handle, uint8_t *Tx, size_t Size, uint32_t Timeout)
 {
   bool retVal = false;
-#if (SPIF_PLATFORM == SPIF_PLATFORM_HAL)
+  (void)Timeout;
+#if SPIF_USE_SOFT_SPI
+  (void)Handle;
+  if (SoftSpiFlash_Transmit(Tx, Size) == HAL_OK)
+  {
+    retVal = true;
+  }
+#elif (SPIF_PLATFORM == SPIF_PLATFORM_HAL)
   if (HAL_SPI_Transmit(Handle->HSpi, Tx, Size, Timeout) == HAL_OK)
   {
     retVal = true;
@@ -248,7 +265,14 @@ bool SPIF_Transmit(SPIF_HandleTypeDef *Handle, uint8_t *Tx, size_t Size, uint32_
 bool SPIF_Receive(SPIF_HandleTypeDef *Handle, uint8_t *Rx, size_t Size, uint32_t Timeout)
 {
   bool retVal = false;
-#if (SPIF_PLATFORM == SPIF_PLATFORM_HAL)
+  (void)Timeout;
+#if SPIF_USE_SOFT_SPI
+  (void)Handle;
+  if (SoftSpiFlash_Receive(Rx, Size) == HAL_OK)
+  {
+    retVal = true;
+  }
+#elif (SPIF_PLATFORM == SPIF_PLATFORM_HAL)
   if (HAL_SPI_Receive(Handle->HSpi, Rx, Size, Timeout) == HAL_OK)
   {
     retVal = true;

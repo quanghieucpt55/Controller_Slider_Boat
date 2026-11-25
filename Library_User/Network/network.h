@@ -14,11 +14,11 @@
 #define INTERFACE_GPRS 1 // đang chạy kết nối GPS
 #define INTERFACE_NULL 0 // đang không kết nối
 
-#define SERVER_NAME "boat.dgt-iot.com.vn"
+#define SERVER_NAME "battery.dgt-iot.com.vn"
 
 #ifdef SERVER_24
-    #define SERVER_PORT 24127
-    #define SERVER_PORT_SERCURITY 24128
+    #define SERVER_PORT 19030
+    #define SERVER_PORT_SERCURITY 19031
 #endif
 
 typedef struct network_config_t network_config_t;

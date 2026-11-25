@@ -211,6 +211,13 @@ static void Modbus_MapInputRegs(void)
     inputReg[ADR_INPUT_BMS_ALM_COMM_FAULT] = (uint16_t)bms.almInfo.comm_fault;         // Cảnh báo truyền thông thất bại
     
     inputReg[ADR_INPUT_GPS_ACTIVE] = (gpsData.state == 3u) ? 1u : 0u;
+    inputReg[ADR_INPUT_GPS_STATE]  = gpsData.state;
+    inputReg[ADR_INPUT_GPS_LAT_HI] = (uint16_t)((uint32_t)gpsData.latitude >> 16);
+    inputReg[ADR_INPUT_GPS_LAT_LO] = (uint16_t)((uint32_t)gpsData.latitude & 0xFFFFu);
+    inputReg[ADR_INPUT_GPS_LON_HI] = (uint16_t)((uint32_t)gpsData.longitude >> 16);
+    inputReg[ADR_INPUT_GPS_LON_LO] = (uint16_t)((uint32_t)gpsData.longitude & 0xFFFFu);
+    inputReg[ADR_INPUT_GPS_SOG]    = gpsData.sog;
+    inputReg[ADR_INPUT_GPS_COG]    = gpsData.cog;
     const uint32_t imd_pos_ohm = IMD_GetRisoPosOhm();
     const uint32_t imd_neg_ohm = IMD_GetRisoNegOhm();
     inputReg[ADR_INPUT_IMD_POS_RISO_KOHM] = u16_clamp_u32((imd_pos_ohm + 500u) / 1000u);

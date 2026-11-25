@@ -849,7 +849,8 @@ int Sim_ConnectServer(void)				// 4
 				return -3;//-3
 			else if (WaitAnswer("ERROR"))
                 Stepto(0x4);
-			else if(Wait(10))
+			/* Quectel QIOPEN có thể tới 150s (DNS+TCP). 10s quá ngắn → kẹt Connecting */
+			else if(Wait(60))
 				return -2;//-4
         }
 		break;
@@ -862,7 +863,7 @@ int Sim_ConnectServer(void)				// 4
 			else if (WaitAnswer("CLOSED")
 				||WaitAnswer("CONNECT FAIL"))
 				return -3;//-3
-			else if(Wait(10))
+			else if(Wait(60))
 				return -2;//-4						// Re Connect
         }
 		break;
@@ -957,7 +958,7 @@ int Sim_MqttEstablish(void)
             {
     			NextStep();
             }
-            else if(Wait(4))
+            else if(Wait(15)) /* 4G latency; 4s dễ timeout CONNACK */
             {
                 Sim1_CountToStepTo(COUNT_SIM_DISCONNECT,0);
                 return 1;
@@ -973,7 +974,7 @@ int Sim_MqttEstablish(void)
             {
                 NextStep();
             }
-            else if(Wait(4))// no respond server
+            else if(Wait(15))// no respond server
             {
                 Sim1_CountToStepTo(COUNT_SIM_DISCONNECT,0);
                 return 1;
@@ -993,7 +994,7 @@ int Sim_MqttEstablish(void)
 				Sim_RequireSendImmediate();// yêu cầu sim gửi ngay lập tức lần đầu kết nối
 				return 2;
 			}
-			else if(Wait(4))// no respond server
+			else if(Wait(15))// no respond server
 			{
 				Sim1_CountToStepTo(COUNT_SIM_DISCONNECT,0);
 				return 1;

@@ -1,7 +1,7 @@
 #ifndef _SWCONFIG_H_
 #define _SWCONFIG_H_
 
-#define ID_DEVICE 1
+#define ID_DEVICE 1000000
 
 #define VERSION_V2
 

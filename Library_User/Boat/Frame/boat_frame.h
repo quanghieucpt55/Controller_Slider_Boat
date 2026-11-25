@@ -3,7 +3,8 @@
 
 #include "cytypes.h"
 
-uint32_t Boat_Frame_Ping_Complete(uint8_t * buf,uint32_t size);  
+/* Ping 350B theo khung SmartCharger; ánh xạ thuyền xem BOAT_MQTT_FRAME_MAP.md */
+uint32_t Boat_Frame_Ping_Complete(uint8_t * buf,uint32_t size);
 uint32_t Boat_Frame_Event(uint8_t *buf, uint32_t size);
 uint8_t FrameCheck(uint8_t * buf,uint32_t size);
 

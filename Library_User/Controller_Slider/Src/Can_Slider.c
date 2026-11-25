@@ -16,7 +16,8 @@ Can_Slider_VCU_t can_slider_vcu;
 
 void Can_Slider_Init(CAN_HandleTypeDef *hcan) {
 	CAN_FilterTypeDef FilterCan;
-	FilterCan.FilterBank = 1;
+	/* CAN2 dùng filter bank >= SlaveStartFilterBank (14) */
+	FilterCan.FilterBank = 14;
     FilterCan.FilterMode = CAN_FILTERMODE_IDLIST;
     FilterCan.FilterScale = CAN_FILTERSCALE_32BIT;
     FilterCan.FilterIdHigh = (CAN_SLIDER_1_ID << 5);
@@ -35,11 +36,15 @@ void Can_Slider_Init(CAN_HandleTypeDef *hcan) {
 }
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
+	/* Driver chỉ trên CAN2 (PB5/PB6) */
+	if (hcan->Instance != CAN2) {
+		return;
+	}
 	if (HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0) > 0) {
+		/* TODO tạm thời: bỏ qua KSI OFF zero frame để test hiển thị CAN trên LCD
 		const bool ksi_on =
 				(HAL_GPIO_ReadPin(KSI_GPIO_Port, KSI_Pin) == GPIO_PIN_SET) ? false : true;
 		if (!ksi_on) {
-			/* KSI OFF: xả sạch FIFO để không xử lý lại frame cũ khi bật lại */
 			while (HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0) > 0) {
 				CAN_RxHeaderTypeDef hdr_drop;
 				uint8_t d_drop[8];
@@ -48,6 +53,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 			memset(&can_slider, 0, sizeof(can_slider));
 			return;
 		}
+		*/
 
 		CAN_RxHeaderTypeDef hdr;
 		uint8_t d[8];

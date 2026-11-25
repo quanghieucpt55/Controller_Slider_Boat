@@ -4,11 +4,13 @@
 #include "string.h"
 #include "system_update.h"
 #include "global.h"
+#include "soft_spi_flash.h"
 
 SPIF_HandleTypeDef spif;
 flash_firmware_info_t flashFirmInfo;
 
-
+/* Dummy handle — soft SPI không dùng peripheral SPI */
+static SPI_HandleTypeDef hspi_flash_soft;
 
 #define BUFFER_READ 256
 #define TEST_BUF_SIZE 256
@@ -18,7 +20,8 @@ uint8_t flash_buf_sector[SPIF_SECTOR_SIZE];
 
 void Flash_Init(void)
 {
-	SPIF_Init(&spif,&hspi1, SPI_FLASH_CS_GPIO_Port, SPI_FLASH_CS_Pin);
+	SoftSpiFlash_InitPins();
+	SPIF_Init(&spif, &hspi_flash_soft, SPI_FLASH_CS_GPIO_Port, SPI_FLASH_CS_Pin);
 }
 
 void Flash_EraseSector(uint32_t sector)

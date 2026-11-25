@@ -30,12 +30,12 @@ struct Client {
 
 /* USER */
 #define MQTT_ALIVE 180
-#define MQTT_USER "mqttboat"
-#define MQTT_PASSWORD "boat12345"
-#define MQTT_CLIENT_ID_BASE "boat"
+#define MQTT_USER "mqttscharge"
+#define MQTT_PASSWORD "scharge555444"
+#define MQTT_CLIENT_ID_BASE "scharge"
 
-#define TOPIC_BOAT_SUB  "boat/sub/"
-#define TOPIC_BOAT_FIRM_SUB "boat/firm/sub/"
+#define TOPIC_BOAT_SUB      "scharge/sub/"
+#define TOPIC_BOAT_FIRM_SUB "scharge/firm/sub/"
 
 uint8_t IsFindNewID(void);
 

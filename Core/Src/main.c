@@ -21,8 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "display_curtis.h"
 #include "Led_Error.h"
+#include "display_curtis.h" /* button_* cho EXTI; LCD đã bỏ */
 #include "wdt.h"
 #include "clock.h"
 #include "extern_rom.h"
@@ -38,6 +38,9 @@
 #include "modbus_rtu_interface.h"
 #include "gnss_uart_dma.h"
 #include "imd.h"
+#include "Can_Slider.h"
+#include "string.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -59,15 +62,16 @@
 ADC_HandleTypeDef hadc1;
 
 CAN_HandleTypeDef hcan1;
+CAN_HandleTypeDef hcan2;
 
-I2C_HandleTypeDef hi2c3;
+I2C_HandleTypeDef hi2c1;
 
 IWDG_HandleTypeDef hiwdg;
 
-SPI_HandleTypeDef hspi1;
-SPI_HandleTypeDef hspi2;
-
 TIM_HandleTypeDef htim2;
+
+/* Giữ symbol cho Display/ST7565 (LCD đã bỏ, không init SPI2) */
+SPI_HandleTypeDef hspi2;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
@@ -84,16 +88,15 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_CAN1_Init(void);
-static void MX_SPI2_Init(void);
+static void MX_CAN2_Init(void);
 static void MX_IWDG_Init(void);
-static void MX_SPI1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART6_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_USART3_UART_Init(void);
-static void MX_I2C3_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -101,10 +104,35 @@ static void MX_I2C3_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-// Hàm debug in ra USB CDC
-//void debug_print(const char* message) {
-//  CDC_Transmit_FS((uint8_t*)message, strlen(message));
-//}
+/* USART1 đang dùng cho YPC Modbus — debug_print tắt tạm */
+void debug_print(const char* message)
+{
+	(void)message;
+}
+
+/*
+ * Ngay sau reset chân còn Hi-Z → driver relay dễ tạch.
+ * Kéo Ctr_Out + EN về OUTPUT LOW trước mọi delay/init dài.
+ * (Giả định active-high: LOW = nhả relay)
+ */
+static void Early_RelaySafeInit(void)
+{
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOEEN | RCC_AHB1ENR_GPIOCEN;
+	(void)RCC->AHB1ENR;
+
+	/* PE2..PE6 = output PP, write 0 */
+	GPIOE->MODER = (GPIOE->MODER & ~0x3FF0u) | 0x1550u;
+	GPIOE->OTYPER &= ~(0x7Cu);
+	GPIOE->PUPDR &= ~0x3FF0u;
+	GPIOE->BSRR = (0x7Cu << 16);
+
+	/* PC10, PC11, PC13 = output PP, write 0 */
+	GPIOC->MODER = (GPIOC->MODER & ~((3u << 20) | (3u << 22) | (3u << 26)))
+	             |  ((1u << 20) | (1u << 22) | (1u << 26));
+	GPIOC->OTYPER &= ~((1u << 10) | (1u << 11) | (1u << 13));
+	GPIOC->PUPDR &= ~((3u << 20) | (3u << 22) | (3u << 26));
+	GPIOC->BSRR = (((1u << 10) | (1u << 11) | (1u << 13)) << 16);
+}
 
 /* USER CODE END 0 */
 
@@ -116,7 +144,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  Early_RelaySafeInit();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -132,27 +160,32 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
+  /* GPIO relay trước — không delay khi chân còn nổi */
+  MX_GPIO_Init();
+  Early_RelaySafeInit();
   SystemUpdate_Init();
-  HAL_Delay(200); // Delay sau khi khởi tạo hệ thống
+  HAL_Delay(200);
   CyDelay_Init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-  MX_GPIO_Init();
+  /* MX_GPIO_Init đã gọi ở SysInit */
   MX_DMA_Init();
   MX_CAN1_Init();
-  MX_SPI2_Init();
-  MX_IWDG_Init();
-  MX_SPI1_Init();
+  MX_CAN2_Init();
+  /* IWDG chỉ bật sau khi init xong — tránh reset giữa chừng / khi debug */
   MX_TIM2_Init();
   MX_USART6_UART_Init();
   MX_USART2_UART_Init();
   MX_USART1_UART_Init();
   MX_ADC1_Init();
   MX_USART3_UART_Init();
-  MX_I2C3_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  IMD_Init(&hi2c3);
+  debug_print("\r\n[BOOT] after I2C1\r\n");
+  if (hi2c1.Instance != NULL && hi2c1.State == HAL_I2C_STATE_READY) {
+    IMD_Init(&hi2c1); /* ADS1115 PB8/PB9 — bỏ qua nếu không có HW */
+  }
   // Khởi tạo Modbus RTU Slave
   ModbusRTU_UartInit();
   ModbusSlaveComp_Init();
@@ -163,15 +196,38 @@ int main(void)
   BoatEventLog_Init();
   Network_Init();
   Sim_Init();
+  /* CAN1 PD0/PD1: BMS ; CAN2 PB5/PB6: Driver
+   * HAL_CAN_Start cần bus recessive — thiếu/hỏng transceiver sẽ timeout.
+   * Không Error_Handler để vẫn boot (LED/Modbus) khi đang bring-up HW. */
   BMS_Jikong_Init(&hcan1);
-  Can_Slider_Init(&hcan1);
-  // Bắt đầu CAN sau khi tất cả filter đã được config
+  Can_Slider_Init(&hcan2);
   if (HAL_CAN_Start(&hcan1) != HAL_OK) {
-    Error_Handler();
+    debug_print("[BOOT] CAN1 Start FAIL (check PD0/PD1 transceiver)\r\n");
+  } else {
+    debug_print("[BOOT] CAN1 Start OK\r\n");
   }
-  ST7565_init();
+  if (HAL_CAN_Start(&hcan2) != HAL_OK) {
+    debug_print("[BOOT] CAN2 Start FAIL (check PB5/PB6 transceiver)\r\n");
+  } else {
+    debug_print("[BOOT] CAN2 Start OK\r\n");
+  }
   VCU_StateInit();
+#ifndef DISABLE_WDT
   MX_IWDG_Init();
+#else
+  debug_print("[BOOT] IWDG disabled (bring-up)\r\n");
+#endif
+  if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST) != RESET) {
+    debug_print("[BOOT] WARN: previous reset was IWDG\r\n");
+  }
+  if (__HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST) != RESET) {
+    debug_print("[BOOT] previous reset was SOFTWARE\r\n");
+  }
+  if (__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST) != RESET) {
+    debug_print("[BOOT] previous reset was PIN/POR\r\n");
+  }
+  __HAL_RCC_CLEAR_RESET_FLAGS();
+  debug_print("[BOOT] Controller_Slider OK\r\n");
 
 // GNSS UART RX DMA-to-IDLE 
 #ifdef GNSS_UART_HANDLE
@@ -195,14 +251,42 @@ int main(void)
     Realtime_Run();
     Sim_Work();
     Network_Supervision();
-    process_button();
     IMD_Task();
     VCU_StateTask();
+#if BOARD_HOLD_CTR_OUT_OFF
+    /* Ép 6 Ctr_Out OFF sau VCU — test CAN/RS485 không kéo relay */
+    HAL_GPIO_WritePin(CTR_OUT_1_GPIO_Port, CTR_OUT_1_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(CTR_OUT_2_GPIO_Port, CTR_OUT_2_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(CTR_OUT_3_GPIO_Port, CTR_OUT_3_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(CTR_OUT_4_GPIO_Port, CTR_OUT_4_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(CTR_OUT_5_GPIO_Port, CTR_OUT_5_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(CTR_OUT_6_GPIO_Port, CTR_OUT_6_Pin, GPIO_PIN_RESET);
+#endif
     led_process();
-    process_menu();
     SystemUpdate_Run();
     BoatEventUpdate();
     ModbusSlaveComp_Run();
+
+    /* Heartbeat ~2Hz: STATUS_LED PB1 (không dùng Toggle — tránh bị IMD/relay đè) */
+    {
+      static uint32_t hb_tick = 0;
+      static uint8_t hb_on = 0;
+      if ((HAL_GetTick() - hb_tick) >= 250u) {
+        hb_tick = HAL_GetTick();
+        hb_on ^= 1u;
+        HAL_GPIO_WritePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin,
+                           hb_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        if (hb_on) {
+          char line[96];
+          (void)snprintf(line, sizeof(line),
+            "[HB] t=%lu drv=%u modbus=%u\r\n",
+            (unsigned long)hb_tick,
+            Can_Slider_IsAlive(1000u) ? 1u : 0u,
+            ModbusSlaveComp_IsOnline(3000u) ? 1u : 0u);
+          debug_print(line);
+        }
+      }
+    }
     
     /* USER CODE END WHILE */
 
@@ -348,37 +432,50 @@ static void MX_CAN1_Init(void)
 }
 
 /**
-  * @brief I2C3 Initialization Function
+  * @brief CAN2 Initialization Function (Driver: PB5 RX / PB6 TX)
   * @param None
   * @retval None
   */
-static void MX_I2C3_Init(void)
+static void MX_CAN2_Init(void)
 {
-
-  /* USER CODE BEGIN I2C3_Init 0 */
-
-  /* USER CODE END I2C3_Init 0 */
-
-  /* USER CODE BEGIN I2C3_Init 1 */
-
-  /* USER CODE END I2C3_Init 1 */
-  hi2c3.Instance = I2C3;
-  hi2c3.Init.ClockSpeed = 100000;
-  hi2c3.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c3.Init.OwnAddress1 = 0;
-  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-  hi2c3.Init.OwnAddress2 = 0;
-  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  hcan2.Instance = CAN2;
+  hcan2.Init.Prescaler = 12;
+  hcan2.Init.Mode = CAN_MODE_NORMAL;
+  hcan2.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan2.Init.TimeSeg1 = CAN_BS1_11TQ;
+  hcan2.Init.TimeSeg2 = CAN_BS2_2TQ;
+  hcan2.Init.TimeTriggeredMode = DISABLE;
+  hcan2.Init.AutoBusOff = ENABLE;
+  hcan2.Init.AutoWakeUp = DISABLE;
+  hcan2.Init.AutoRetransmission = DISABLE;
+  hcan2.Init.ReceiveFifoLocked = DISABLE;
+  hcan2.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan2) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN I2C3_Init 2 */
+}
 
-  /* USER CODE END I2C3_Init 2 */
-
+/**
+  * @brief I2C1 Initialization Function — IMD ADS1115 (PB8 SCL / PB9 SDA)
+  * Không Error_Handler: board bring-up có thể chưa hàn ADS1115.
+  */
+static void MX_I2C1_Init(void)
+{
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    debug_print("[BOOT] I2C1 init FAIL — skip IMD\r\n");
+    hi2c1.Instance = NULL;
+  }
 }
 
 /**
@@ -406,82 +503,6 @@ static void MX_IWDG_Init(void)
   /* USER CODE BEGIN IWDG_Init 2 */
 
   /* USER CODE END IWDG_Init 2 */
-
-}
-
-/**
-  * @brief SPI1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_SPI1_Init(void)
-{
-
-  /* USER CODE BEGIN SPI1_Init 0 */
-
-  /* USER CODE END SPI1_Init 0 */
-
-  /* USER CODE BEGIN SPI1_Init 1 */
-
-  /* USER CODE END SPI1_Init 1 */
-  /* SPI1 parameter configuration*/
-  hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
-  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi1.Init.CRCPolynomial = 10;
-  if (HAL_SPI_Init(&hspi1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SPI1_Init 2 */
-
-  /* USER CODE END SPI1_Init 2 */
-
-}
-
-/**
-  * @brief SPI2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_SPI2_Init(void)
-{
-
-  /* USER CODE BEGIN SPI2_Init 0 */
-
-  /* USER CODE END SPI2_Init 0 */
-
-  /* USER CODE BEGIN SPI2_Init 1 */
-
-  /* USER CODE END SPI2_Init 1 */
-  /* SPI2 parameter configuration*/
-  hspi2.Instance = SPI2;
-  hspi2.Init.Mode = SPI_MODE_MASTER;
-  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi2.Init.NSS = SPI_NSS_SOFT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_128;
-  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi2.Init.CRCPolynomial = 10;
-  if (HAL_SPI_Init(&hspi2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SPI2_Init 2 */
-
-  /* USER CODE END SPI2_Init 2 */
 
 }
 
@@ -546,7 +567,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 9600; /* YPC Modbus RTU */
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -612,7 +633,7 @@ static void MX_USART3_UART_Init(void)
 
   /* USER CODE END USART3_Init 1 */
   huart3.Instance = USART3;
-  huart3.Init.BaudRate = 115200;
+  huart3.Init.BaudRate = 9600;
   huart3.Init.WordLength = UART_WORDLENGTH_8B;
   huart3.Init.StopBits = UART_STOPBITS_1;
   huart3.Init.Parity = UART_PARITY_NONE;
@@ -698,109 +719,91 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_6|SCK_RTC_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|SCK_RTC_Pin|SDA_RTC_Pin|RST_RTC_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI_FLASH_CS_GPIO_Port, SPI_FLASH_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4|GPIO_PIN_5|SOFT_I2C_SCL_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, SOFT_I2C_SDA_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_12|SOFT_I2C_SCL_Pin
-                          |SOFT_I2C_SDA_Pin|RST_RTC_Pin|SDA_RTC_Pin, GPIO_PIN_RESET);
+  /* PB0 free, PB1 = STATUS_LED */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|STATUS_LED_Pin|GPIO_PIN_2, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
+  /*Configure GPIO pin Output Level — SD_CS/SD_RST + PWR_KEY */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|PWR_KEY_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : PE2 PE3 PE6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_6;
+  /* Ctr_Out_2..6: PE6 PE5 PE4 PE3 PE2 — tất cả OUTPUT (không để PE5 input) */
+  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PE5 PE1 */
-  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_1;
+  /* PE1 input (nếu dùng) */
+  GPIO_InitStruct.Pin = GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : SPI_FLASH_CS_Pin */
-  GPIO_InitStruct.Pin = SPI_FLASH_CS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(SPI_FLASH_CS_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  /* Ctr_Out_1=PC13, IMD EN_POS=PC10, EN_NEG=PC11; giữ PC4/PC5 nếu còn dùng */
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_13, GPIO_PIN_RESET);
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB0 PB1 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
+  /* STATUS_LED PB1 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|STATUS_LED_Pin|GPIO_PIN_2;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB12 RST_RTC_Pin SDA_RTC_Pin */
-  GPIO_InitStruct.Pin = GPIO_PIN_12|RST_RTC_Pin|SDA_RTC_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PD8 PD9 */
+  /* SD_CS PD8, SD_RST PD9 (không còn LCD) */
   GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PD10 */
   GPIO_InitStruct.Pin = GPIO_PIN_10;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PD11 PD12 PD13 */
+  /* Buttons PD11/12/13 */
   GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PWR_KEY_Pin */
   GPIO_InitStruct.Pin = PWR_KEY_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(PWR_KEY_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SOFT_I2C_SCL_Pin SOFT_I2C_SDA_Pin */
-  GPIO_InitStruct.Pin = SOFT_I2C_SCL_Pin|SOFT_I2C_SDA_Pin;
+  /* EEPROM soft-I2C: SDA=PA8, SCL=PC9 */
+  GPIO_InitStruct.Pin = SOFT_I2C_SDA_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(SOFT_I2C_SDA_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : SCK_RTC_Pin */
-  GPIO_InitStruct.Pin = SCK_RTC_Pin;
+  GPIO_InitStruct.Pin = SOFT_I2C_SCL_Pin;
+  HAL_GPIO_Init(SOFT_I2C_SCL_GPIO_Port, &GPIO_InitStruct);
+
+  /* DS1302: SCK/SDA/RST trên PE11/PE14/PE15 */
+  GPIO_InitStruct.Pin = SCK_RTC_Pin|SDA_RTC_Pin|RST_RTC_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(SCK_RTC_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /* W25Q soft-SPI pins init trong SoftSpiFlash_InitPins() */
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 1, 0);

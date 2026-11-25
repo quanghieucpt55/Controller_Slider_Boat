@@ -61,8 +61,12 @@ static imd_state_t imd;
 
 static void IMD_SetRelayOutputs(bool pos_on, bool neg_on)
 {
+	(void)pos_on;
+	(void)neg_on;
+#if IMD_DRIVE_EN_RELAYS
 	HAL_GPIO_WritePin(RELAY_POS_GPIO_Port, RELAY_POS_Pin, pos_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(RELAY_NEG_GPIO_Port, RELAY_NEG_Pin, neg_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+#endif
 }
 
 static void IMD_ClearChannel(imd_channel_t *channel)

@@ -10,10 +10,10 @@
 #include "boat_log.h"
 #include "network.h"
 
-#define HEADER_TOPIC_BOAT_EVENT "boat/event/" // header topic gửi sự kiện lỗi, thông báo
-#define HEADER_TOPIC_BOAT_LOG "boat/log/" // header topic gửi status Boat (ping)
-#define HEADER_TOPIC_BOAT_REMOTE "boat/remote/" // header topic gửi phản hồi lại server
-#define HEADER_TOPIC_FIRMWARE_REMOTE "boat/firm/resp/" // header topic gửi phản hồi OTA
+#define HEADER_TOPIC_BOAT_EVENT "scharge/event/" // header topic gửi sự kiện lỗi, thông báo
+#define HEADER_TOPIC_BOAT_LOG "scharge/log/"     // header topic gửi status (ping)
+#define HEADER_TOPIC_BOAT_REMOTE "scharge/remote/" // header topic gửi phản hồi lại server
+#define HEADER_TOPIC_FIRMWARE_REMOTE "scharge/firm/resp/" // header topic gửi phản hồi OTA
 
 // retain
 #define RETAIN_TOPIC_BOAT_MAINS 0
@@ -32,7 +32,7 @@
 uint32_t id_subscribed=0;// lưu trữ id đã sub
 #define SIZE_BUFFER_TOPIC 100
 char bufferTopic[SIZE_BUFFER_TOPIC];
-#define MAX_BUF_GLOBAL_CACHE 500
+#define MAX_BUF_GLOBAL_CACHE 512
 uint8_t buf_Cache[MAX_BUF_GLOBAL_CACHE];
 #define MAX_BUF_EVENT 15
 uint8_t buf_Event[MAX_BUF_EVENT];
@@ -154,7 +154,8 @@ void Client_ConnectBroker(Client * c)
 	if(rand_client_id<0)
 		rand_client_id=-rand_client_id;
 	char * bufClientId=(char *)buf_Cache;
-	snprintf(bufClientId,36,"%s_%d",MQTT_CLIENT_ID_BASE,(int)ID_DEVICE,rand_client_id);
+	/* Spec: scharge_{ID}_{RANDOM} — trước đây thiếu %d thứ 2 nên rand bị bỏ */
+	snprintf(bufClientId, 36, "%s_%d_%d", MQTT_CLIENT_ID_BASE, (int)ID_DEVICE, rand_client_id);
     lwmqtt_options_t option_connect;
     option_connect.clean_session=1;
     option_connect.client_id.data=bufClientId;
@@ -203,13 +204,13 @@ void Client_SubTopic_Boat(Client * c)
 void Client_Ping_Boat(Client * c)
 {
     uint8_t * frameDataNetwork=buf_Cache;
-    uint32_t lenFrame=Boat_Frame_Ping_Complete(frameDataNetwork,300);
-    if (lenFrame==0)
+    uint32_t lenFrame = Boat_Frame_Ping_Complete(frameDataNetwork, 350);
+    if (lenFrame == 0)
         return;
-    *(c->len_buf_resp)=Mqtt_Encode_Publish(c->buf_resp,c->size_buf_resp,
+    *(c->len_buf_resp) = Mqtt_Encode_Publish(c->buf_resp, c->size_buf_resp,
                         (uint8_t *)HEADER_TOPIC_BOAT_LOG,
-                        frameDataNetwork,lenFrame,
-                        RETAIN_TOPIC_BOAT_LOG,Qos_TOPIC_BOAT_LOG,ID_DEVICE);
+                        frameDataNetwork, lenFrame,
+                        RETAIN_TOPIC_BOAT_LOG, Qos_TOPIC_BOAT_LOG, ID_DEVICE);
     c->ipstack->mqttwrite(c->buf_resp,*(c->len_buf_resp));
 }
 
